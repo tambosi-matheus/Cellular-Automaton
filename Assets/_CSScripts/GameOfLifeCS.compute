@@ -1,0 +1,70 @@
+#pragma kernel Create
+#pragma kernel Update
+
+int TexSize;
+Texture2D<float4> Prev;
+RWTexture2D<float4> Result;
+RWTexture2D<float4> MovingMap;
+
+float hash(uint state)
+{
+    state ^= 2747636419u;
+    state *= 2654435769u;
+    state ^= state >> 16;
+    state *= 2654435769u;
+    state ^= state >> 16;
+    state *= 2654435769u;
+    return state;
+}
+
+float scaledHash01(float state)
+{
+    return (float) hash((uint) state) / 4294967295.0;
+}
+
+[numthreads(8, 8, 1)]
+void Create(uint3 id : SV_DispatchThreadID)
+{
+    if (scaledHash01(id.y * id.x + id.x + hash(id.x + id.y * 100000))  >= 0.5f)
+    {
+        Result[id.xy] = float4(1, 1, 1, 1);
+    }  
+}
+
+[numthreads(8, 8, 1)]
+void Update(uint3 id : SV_DispatchThreadID)
+{   
+    // Get neighbors in 3x3 grid
+    int neighborsCount = 0;
+    
+    for (int i = -1; i <= 1; i++)
+    {
+        for (int j = -1; j <= 1; j++)
+        {
+            if ((i == 0 && j == 0) || (id.x == 0 && i == -1) || (id.y == 0 && j == -1) < 0)                         
+                continue;
+            if (Prev[uint2(id.x + i, id.y + j)].a == 1)            
+                neighborsCount += 1;
+        }
+    }
+
+    float alive = Prev[id.xy].a;
+    if (alive == 1)
+    {    
+        if (neighborsCount < 2 || neighborsCount > 3)        
+            alive = 0.99; 
+    }
+    else
+    {
+        if (neighborsCount == 3)        
+            alive = 1;
+        else if (alive > 0.1)
+            alive *= 0.9f;
+    }
+    
+    if (alive == 0)
+        Result[id.xy] = float4(0, 0, 0, 0);
+    else
+        Result[id.xy] = float4(0.9, alive, alive, alive);
+        
+}

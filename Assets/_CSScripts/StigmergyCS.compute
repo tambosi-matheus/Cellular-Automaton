@@ -1,0 +1,152 @@
+#pragma kernel Diffuse
+#pragma kernel Move
+#pragma kernel Show
+#pragma kernel ClearAgents
+
+
+struct Cell
+{
+    float2 position;
+    float4 color;
+    float angle;
+    int mainColor;
+};
+
+RWTexture2D<float> trailMap;
+RWStructuredBuffer<Cell> cells;
+RWTexture2D<bool> agentsMap;
+
+float3 agentColor;
+float3 trailColor;
+
+int width;
+int height;
+int cellCount;
+
+float time;
+
+float hash(uint state)
+{
+    state ^= 2747636419u;
+    state *= 2654435769u;
+    state ^= state >> 16;
+    state *= 2654435769u;
+    state ^= state >> 16;
+    state *= 2654435769u;
+    return state;
+}
+
+float scaledHash01(float state)
+{
+    return (float) hash((uint) state) / 4294967295.0;
+}
+
+float sense(Cell c, float angle)
+{
+    float2 dir = float2(cos(angle), sin(angle));    
+    float2 pos = c.position + (dir * 10);
+    float sum = 0;
+    for (int i = -1; i <= 1; i++)
+    {
+        for (int j = -1; j <= 1; j++)
+        {
+            int sampleX = min(width - 1, max(0, pos.x + i));
+            int sampleY = min(height - 1, max(0, pos.y + j));
+            sum += trailMap[uint2(sampleX, sampleY)];
+        }
+    }
+    return sum;
+}
+
+float CenterAtractor(Cell c)
+{
+    return pow(c.position.x, 2) + pow(c.position.y, 2);
+}
+
+RWTexture2D<float4> mainMap;
+
+[numthreads(8, 8, 1)]
+void Show(uint3 id : SV_DispatchThreadID)
+{
+    mainMap[id.xy] = 0;
+    if (agentsMap[id.xy])
+        mainMap[id.xy] = float4(agentColor, 1);
+    else if (trailMap[id.xy] > 0)
+        mainMap[id.xy] = float4(trailColor, trailMap[id.xy]);
+}
+
+[numthreads(8, 8, 1)]
+void ClearAgents(uint3 id : SV_DispatchThreadID)
+{
+    agentsMap[id.xy] = false;
+}
+
+float speed;
+bool hasAtraction;
+
+[numthreads(64, 1, 1)]
+void Move(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= (uint) cellCount){return;}
+    Cell c = cells[id.x];
+    float2 pos = c.position;
+    float random = scaledHash01(pos.y * width + pos.x + hash(id.x + time * 100000));
+    float angle = c.angle + (random - 0.5) * 2 / 20;
+    float sensorAngleRad = 0.1 * 2 * 3.1415;
+    float right = sense(c, angle - sensorAngleRad);
+    float forward = sense(c, angle);
+    float left = sense(c, angle + sensorAngleRad);
+    
+    if (right > forward && right > left)
+        angle -= sensorAngleRad;
+    else if (left > forward)
+        angle += sensorAngleRad;
+    
+    pos += float2(cos(angle), sin(angle)) * speed;
+    if (hasAtraction)
+    {
+        float2 dir = float2((uint) width / 2, (uint)height / 2)
+        -c.position;
+        pos += (dir / 1000);
+    }
+    if (pos.x > width - 1 || pos.x < 0 || pos.y > height - 1 || pos.y < 0)
+    {
+        angle = scaledHash01(pos.x * height + pos.y + hash(id.x + time * 100000)) * 2 * 3.1415;
+        pos.x = max(0, min(width - 1, pos.x));
+        pos.y = max(0, min(height - 1, pos.y));
+    }
+    //float mapColor = trailMap[(uint2) c.position];
+    //mapColor = min(1, mapColor + trailColor);
+    
+    agentsMap[(uint2) c.position] = true;
+    trailMap[(uint2) c.position] = 1;
+    cells[id.x].position = pos;
+    cells[id.x].angle = angle;
+}
+
+float diffuseRate;
+float decayRate;
+int diffuseRadius;
+
+[numthreads(8, 8, 1)]
+void Diffuse(uint3 id : SV_DispatchThreadID)
+{
+    float alpha = trailMap[id.xy];
+    float4 blur = 0;
+    for (int i = -diffuseRadius; i <= diffuseRadius; i++)
+    {
+        for (int j = -diffuseRadius; j <= diffuseRadius; j++)
+        {
+            int sampleX = min(width - 1, max(0, id.x + i));
+            int sampleY = min(height - 1, max(0, id.y + j));
+            blur += trailMap[uint2(sampleX, sampleY)];
+        }
+    }
+    blur /= ((diffuseRadius * 2) + 1);
+    
+    float finalAlpha = alpha * (1 - diffuseRate) + blur.w * diffuseRate;
+    
+    trailMap[id.xy] = max(0, finalAlpha - decayRate);
+}
+
+

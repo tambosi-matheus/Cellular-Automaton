@@ -1,0 +1,119 @@
+#pragma kernel Diffuse
+#pragma kernel Move
+
+
+struct Cell
+{
+    float2 position;
+    float4 color;
+    float angle;
+    int mainColor;
+};
+
+RWTexture2D<float4> trailMap;
+RWStructuredBuffer<Cell> cells;
+
+int width;
+int height;
+int cellCount;
+
+float time;
+
+float hash(uint state)
+{
+    state ^= 2747636419u;
+    state *= 2654435769u;
+    state ^= state >> 16;
+    state *= 2654435769u;
+    state ^= state >> 16;
+    state *= 2654435769u;
+    return state;
+}
+
+float scaledHash01(float state)
+{
+    return (float) hash((uint) state) / 4294967295.0;
+}
+
+float sense(Cell c, float angle)
+{
+    float2 dir = float2(cos(angle), sin(angle));    
+    float2 pos = c.position + (dir * 10);
+    float sum = 0;
+    for (int i = -1; i <= 1; i++)
+    {
+        for (int j = -1; j <= 1; j++)
+        {
+            int sampleX = min(width - 1, max(0, pos.x + i));
+            int sampleY = min(height - 1, max(0, pos.y + j));
+            sum += trailMap[uint2(sampleX, sampleY)].a;
+        }
+    }
+    return sum;
+}
+
+float diffuseRate;
+float decayRate;
+int diffuseRadius;
+
+[numthreads(8, 8, 1)]
+void Diffuse(uint3 id : SV_DispatchThreadID)
+{
+    float4 color = trailMap[id.xy];
+    float4 blur = 0;
+    for (int i = -diffuseRadius; i <= diffuseRadius; i++)
+    {
+        for (int j = -diffuseRadius; j <= diffuseRadius; j++)
+        {
+            int sampleX = min(width - 1, max(0, id.x + i));
+            int sampleY = min(height - 1, max(0, id.y + j));
+            blur += trailMap[uint2(sampleX, sampleY)];
+        }
+    }
+    blur /= (diffuseRadius * 2) + 1;
+    
+    float4 finalColor = color * (1 - diffuseRate) + blur * (diffuseRate);
+    
+    trailMap[id.xy] = max(0, finalColor - decayRate);
+}
+
+float speed;
+
+[numthreads(64, 1, 1)]
+void Move(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= (uint) cellCount){return;}
+    Cell c = cells[id.x];
+    float2 pos = c.position;
+    float random = scaledHash01(pos.y * width + pos.x + hash(id.x + time * 100000));
+    float angle = c.angle + (random - 0.5) * 2 / 10;
+    float sensorAngleRad = 0.1 * 2 * 3.1415;
+    float right = sense(c, angle - sensorAngleRad);
+    float forward = sense(c, angle);
+    float left = sense(c, angle + sensorAngleRad);
+    
+    int power = 10;
+    if (right > forward && right > left)
+    {
+       // cells[id.x].color = float4(1, 0, 0, 1);
+        angle -= sensorAngleRad;
+    }
+    else if (left > forward)
+    {
+        //cells[id.x].color = float4(0, 1, 0, 1);
+        angle += sensorAngleRad;
+    }    
+    //angle = c.angle;
+    pos += float2(cos(angle), sin(angle)) * speed;
+    if (pos.x > width -1 || pos.x < 0 || pos.y > height - 1 || pos.y < 0)
+    {
+        angle = scaledHash01(pos.x * height + pos.y + hash(id.x + time * 100000)) * 2 * 3.1415;
+        pos.x = max(0, min(width - 1, pos.x));
+        pos.y = max(0, min(height - 1, pos.y));
+    }
+    float4 mapColor = trailMap[(uint2) c.position];
+    mapColor = min(1, mapColor + c.color);
+    trailMap[(uint2) c.position] = mapColor;
+    cells[id.x].position = pos;
+    cells[id.x].angle = angle;
+}
