@@ -7,7 +7,6 @@ public class GameOfLife : MonoBehaviour
 {
     [Range(1, 200)] public int FPS;
     private int _resolution = 1024;
-    public bool showMoving;
     [HideInInspector] public int Resolution
     {
         get => _resolution;
@@ -21,18 +20,23 @@ public class GameOfLife : MonoBehaviour
 
 
     public ComputeShader _shader;
-    [HideInInspector] public bool isPlaying = true;
+    [HideInInspector] public bool _isPlaying = true;
     [SerializeField] RawImage _image;
 
     private RenderTexture[] _textures = new RenderTexture[3];
+    private RenderTexture _colorTexture;
     private int _currentTexture = 0, _prevTexture;
-    private int _loopKernel, _createGridKernel;
+    private int _loopKernel, _createGridKernel, _showKernel;
+
+    [Range(0, 1)] public float _decayRate;
+    public bool _randomRegeneration;
 
     private void Awake()
     {
         _createGridKernel = _shader.FindKernel("Create");
         _loopKernel = _shader.FindKernel("Update");
-        
+        _showKernel = _shader.FindKernel("Show");
+
     }
 
     void OnEnable()
@@ -43,8 +47,8 @@ public class GameOfLife : MonoBehaviour
     void OnDestroy()
     {
         foreach (var t in _textures)
-            if (t != null) t.Release();        
-        //Array.ForEach(_textures, t => t?.Release());
+            if (t != null) t.Release();
+        _colorTexture.Release();
         _textures = null;
         StopAllCoroutines();
     }
@@ -60,6 +64,8 @@ public class GameOfLife : MonoBehaviour
             _textures[i].enableRandomWrite = true;
             _textures[i].Create();
         }
+        _colorTexture = new RenderTexture(Resolution, Resolution, 24) { enableRandomWrite = true};
+        _colorTexture.Create();
         _shader.SetTexture(_createGridKernel, "Result", _textures[_currentTexture]);
         _shader.Dispatch(_createGridKernel, Resolution / 8, Resolution / 8, 1);
 
@@ -72,10 +78,11 @@ public class GameOfLife : MonoBehaviour
     {
         while (true)
         {
-            if (isPlaying)
+            if (_isPlaying)
             {
                 GOFUpdate();
-                _image.texture = _textures[_currentTexture];
+                GOFShow();
+                _image.texture = _colorTexture;
             }
             yield return new WaitForSeconds(1f / FPS);
         }
@@ -85,8 +92,19 @@ public class GameOfLife : MonoBehaviour
     {
         _prevTexture = _currentTexture;
         _currentTexture = (_currentTexture + 1) % 2;
+        _shader.SetFloat("decayRate", _decayRate);
+        _shader.SetBool("randomRegeneration", _randomRegeneration);
         _shader.SetTexture(_loopKernel, "Prev", _textures[_prevTexture]);
         _shader.SetTexture(_loopKernel, "Result", _textures[_currentTexture]);
         _shader.Dispatch(_loopKernel, Resolution / 8, Resolution / 8, 1);        
+    }
+
+    private void GOFShow()
+    {
+        _shader.SetTexture(_showKernel, "Prev", _textures[_prevTexture]);
+        _shader.SetTexture(_showKernel, "Result", _textures[_currentTexture]);
+        _shader.SetTexture(_showKernel, "ColorMap", _colorTexture);
+        _shader.Dispatch(_showKernel, Resolution / 8, Resolution / 8, 1);
+
     }
 }

@@ -144,8 +144,8 @@ public class Stigmergy : MonoBehaviour
         StigmergyCS.SetFloat("time", Time.time);
         StigmergyCS.SetInt("cellCount", CellCount);
         StigmergyCS.SetBool("hasAtraction", hasAtractor);
-        StigmergyCS.SetBuffer(moveKernel, "cells", cellsBuffer);
         StigmergyCS.SetFloats("trailColor", _trailFloat);
+        StigmergyCS.SetBuffer(moveKernel, "cells", cellsBuffer);
         StigmergyCS.SetTexture(moveKernel, "trailMap", trailTexture);
         StigmergyCS.SetTexture(moveKernel, "agentsMap", agentsTexture);
         StigmergyCS.Dispatch(moveKernel, (int)(CellCount / 64), 1, 1);

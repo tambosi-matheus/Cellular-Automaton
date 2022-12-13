@@ -629,8 +629,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   FPS: 200
   _shader: {fileID: 7200000, guid: d782fa75a1a23864bb6b8ce86114553a, type: 3}
-  isPlaying: 1
+  _isPlaying: 1
   _image: {fileID: 426997890}
+  _decayRate: 0.067
+  _randomRegeneration: 1
 --- !u!114 &797093522
 MonoBehaviour:
   m_ObjectHideFlags: 0

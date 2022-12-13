@@ -20,15 +20,15 @@ public class GameOfLifeEditor : Editor
             gof.GOFCreate();
         
 
-        if (gof.isPlaying)
+        if (gof._isPlaying)
         {
             if (GUILayout.Button("Pause simulation"))
-                gof.isPlaying = !gof.isPlaying;
+                gof._isPlaying = !gof._isPlaying;
         }
         else
         {
             if (GUILayout.Button("Resume Simulation"))
-                gof.isPlaying = !gof.isPlaying;
+                gof._isPlaying = !gof._isPlaying;
         }        
     }
     void OnEnable()

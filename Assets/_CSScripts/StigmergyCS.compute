@@ -1,6 +1,6 @@
-#pragma kernel Diffuse
-#pragma kernel Move
 #pragma kernel Show
+#pragma kernel Move
+#pragma kernel Diffuse
 #pragma kernel ClearAgents
 
 
@@ -14,7 +14,7 @@ struct Cell
 
 RWTexture2D<float> trailMap;
 RWStructuredBuffer<Cell> cells;
-RWTexture2D<bool> agentsMap;
+RWTexture2D<float> agentsMap;
 
 float3 agentColor;
 float3 trailColor;
@@ -41,6 +41,8 @@ float scaledHash01(float state)
     return (float) hash((uint) state) / 4294967295.0;
 }
 
+
+// Get sensor weight
 float sense(Cell c, float angle)
 {
     float2 dir = float2(cos(angle), sin(angle));    
@@ -58,27 +60,34 @@ float sense(Cell c, float angle)
     return sum;
 }
 
+
+// Get Atractor force
 float CenterAtractor(Cell c)
 {
     return pow(c.position.x, 2) + pow(c.position.y, 2);
 }
 
+
+
 RWTexture2D<float4> mainMap;
 
+// Paint final map with agents and trails
 [numthreads(8, 8, 1)]
 void Show(uint3 id : SV_DispatchThreadID)
 {
     mainMap[id.xy] = 0;
-    if (agentsMap[id.xy])
+    if (agentsMap[id.xy] == 1)
         mainMap[id.xy] = float4(agentColor, 1);
     else if (trailMap[id.xy] > 0)
         mainMap[id.xy] = float4(trailColor, trailMap[id.xy]);
 }
 
+
+// Clear agents map
 [numthreads(8, 8, 1)]
 void ClearAgents(uint3 id : SV_DispatchThreadID)
 {
-    agentsMap[id.xy] = false;
+    agentsMap[id.xy] = 0;
 }
 
 float speed;
@@ -87,6 +96,8 @@ bool hasAtraction;
 [numthreads(64, 1, 1)]
 void Move(uint3 id : SV_DispatchThreadID)
 {
+    
+    // Get basic info - position angle sensors
     if (id.x >= (uint) cellCount){return;}
     Cell c = cells[id.x];
     float2 pos = c.position;
@@ -97,11 +108,12 @@ void Move(uint3 id : SV_DispatchThreadID)
     float forward = sense(c, angle);
     float left = sense(c, angle + sensorAngleRad);
     
+    // Apply forces
     if (right > forward && right > left)
         angle -= sensorAngleRad;
     else if (left > forward)
         angle += sensorAngleRad;
-    
+       
     pos += float2(cos(angle), sin(angle)) * speed;
     if (hasAtraction)
     {
@@ -115,10 +127,10 @@ void Move(uint3 id : SV_DispatchThreadID)
         pos.x = max(0, min(width - 1, pos.x));
         pos.y = max(0, min(height - 1, pos.y));
     }
-    //float mapColor = trailMap[(uint2) c.position];
-    //mapColor = min(1, mapColor + trailColor);
     
-    agentsMap[(uint2) c.position] = true;
+    
+    // Update textures
+    agentsMap[(uint2) c.position] = 1;
     trailMap[(uint2) c.position] = 1;
     cells[id.x].position = pos;
     cells[id.x].angle = angle;
