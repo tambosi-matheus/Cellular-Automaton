@@ -11,7 +11,7 @@ I've been passioned about automation, systems and AI since my first Boid code in
 
 Stigmergy - Agents wander around leaving a trail that decay and diffuse over time. Agents will steer towards trails
 
-Game of Life - Cells life or die based on the quantity of live cells adjacent to them
+Game of Life - Cells live or die based on the quantity of live cells adjacent to them
 
 <small>This explanations are extremely superficial, if you're interested in this topics I suggest reading related papers</small>
 
